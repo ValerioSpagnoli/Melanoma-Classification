@@ -1,6 +1,6 @@
 # Nevi-Classification
 
-##Progetto del 'Laboratorio di Intelligenza Artificiale': Nevi Classification
+Progetto del 'Laboratorio di Intelligenza Artificiale': Nevi Classification
 
 Progetto del laboraorio di Intelligenza Artificiale (Ingegneria Informatica e Automatica - Università La Sapienza di Roma).  
 
