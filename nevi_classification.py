@@ -11,7 +11,7 @@ Original file is located at
 Progetto del laboraorio di Intelligenza Artificiale (Ingegneria Informatica e Automatica - Università La Sapienza di Roma).  
 
 Il progetto consiste nella creazione di un classificatore con reti neurali in grado di discriminare un melanoma da un nevo benigno.  
-Si è fatto riferimento alla Challenge proposta da ISIC (International Skin Imaging Collaboration - *https://challenge.isic-archive.com*) nel 2016, e in particolare alla task 3 (Lesion Classification - *https://challenge.isic-archive.com/landing/2016/39/*), usandone i dataset e testando il modello attraverso le stesse metriche.
+Si è fatto riferimento alla Challenge proposta da ISIC (International Skin Imaging Collaboration - *https://www.isic-archive.com/#!/topWithHeader/wideContentTop/main* - *https://challenge.isic-archive.com*) nel 2016, e in particolare alla task 3 (Lesion Classification - *https://challenge.isic-archive.com/landing/2016/39/*), usandone i dataset e testando il modello attraverso le stesse metriche.
 
 Progetto di Spagnoli Valerio: *spagnoli.1887715@studenti.uniroma1.it*.  
   
@@ -44,11 +44,11 @@ import pandas as pd
 import os
 
 from skimage import io
-from sklearn.metrics import classification_report
-from sklearn.metrics import confusion_matrix, precision_recall_curve, f1_score, roc_curve, roc_auc_score, average_precision_score, balanced_accuracy_score
+from sklearn.metrics import *
 from sklearn.model_selection import KFold
 
 import matplotlib.pyplot as plt
+import matplotlib.image as mpimg
 from mpl_toolkits.axes_grid1 import ImageGrid
 
 import numpy as np
@@ -60,7 +60,9 @@ import random
 
 from google.colab import files
 
-import warnings
+import pickle
+
+from PIL import Image
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"Using {device} device")
@@ -150,6 +152,10 @@ def get_aug_dataset():
                                   transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
   
   dataset = ISIC_Dataset(csv_file = path_csv, img_dir = path_img, transform = transform, data = "Train", device = device)
+
+  if(dataset == None):
+    print("Errore nel setup del dataset.")
+    return
 
   return dataset
 
@@ -310,16 +316,13 @@ def get_model():
 
   model.to(device)
 
-  criterion = nn.BCELoss()
-  criterion.to(device)
-
   optimizer = optim.Adam(model.parameters(), lr = learning_rate)
 
   print("Model:     ResNet 34 (pretrained)")
   print("Criterion: BCELoss")
   print("Optimizer: Adam (lr = {})".format(learning_rate))
   
-  return model, criterion, optimizer
+  return model, optimizer
 
 def train_epoch(model = None, device = None, train_loader = None, optimizer = None):
 
@@ -356,7 +359,7 @@ def train_epoch(model = None, device = None, train_loader = None, optimizer = No
 
     for j in range(0, labels.size()[0]):
       out = 0 #benign
-      if(outputs[j]>=0.5):
+      if(outputs[j]>0.5):
         out = 1 #malignant
       
       lab = labels[j]
@@ -371,7 +374,7 @@ def train_epoch(model = None, device = None, train_loader = None, optimizer = No
         
   return loss_epoch, correct_prediction_epoch
 
-def validation_epoch(model = None, device = None, val_loader = None, criterion = None, optimizer = None):
+def validation_epoch(model = None, device = None, val_loader = None, optimizer = None):
 
   loss_epoch = 0
   correct_prediction_epoch = 0
@@ -390,13 +393,16 @@ def validation_epoch(model = None, device = None, val_loader = None, criterion =
       outputs = model(inputs)
       outputs = torch.sigmoid(outputs) 
 
+      criterion = nn.BCELoss()
+      criterion.to(device)
+
       loss = criterion(outputs, labels)
 
       loss_epoch += loss.item()
 
       for j in range(0, labels.size()[0]):
         out = 0 #benign
-        if(outputs[j]>=0.5):
+        if(outputs[j]>0.5):
           out = 1 #malignant
           
         lab = labels[j]
@@ -437,7 +443,7 @@ def training(dataset = None, model = None, device = None, optimizer = None, crit
 
       train_loss, train_correct = train_epoch(model, device, train_loader, optimizer)
       train_aug_loss, train_aug_correct = train_epoch(model, device, train_aug_loader, optimizer)
-      val_loss, val_correct = validation_epoch(model, device, val_loader, criterion)
+      val_loss, val_correct = validation_epoch(model, device, val_loader)
 
       train_loss = train_loss / len(train_loader.sampler)
       train_acc = train_correct / len(train_loader.sampler) * 100
@@ -458,8 +464,37 @@ def training(dataset = None, model = None, device = None, optimizer = None, crit
 
       file = open("/content/drive/MyDrive/Università/Progetto Lab IAGI/Training Model Checkpoint/info_checkpoint.txt", "w")
       file.writelines(['Fold: ',str(fold+1),'\n', 'Epoch: ',str(epoch+1)])
+
+      total_train_loss_file = open('/content/drive/MyDrive/Università/Progetto Lab IAGI/Training Model Checkpoint/total_train_loss.txt', 'wb')
+      pickle.dump(total_train_loss, total_train_loss_file)
+
+      total_val_loss_file = open('/content/drive/MyDrive/Università/Progetto Lab IAGI/Training Model Checkpoint/total_val_loss.txt', 'wb')
+      pickle.dump(total_val_loss, total_val_loss_file)
+
+      total_train_acc_file = open('/content/drive/MyDrive/Università/Progetto Lab IAGI/Training Model Checkpoint/total_train_acc.txt', 'wb')
+      pickle.dump(total_train_acc, total_train_acc_file)
+
+      total_val_acc_file = open('/content/drive/MyDrive/Università/Progetto Lab IAGI/Training Model Checkpoint/total_val_acc.txt', 'wb')
+      pickle.dump(total_val_acc, total_val_acc_file)
+
       torch.save(model, "/content/drive/MyDrive/Università/Progetto Lab IAGI/Training Model Checkpoint/checkpoint_model.pt")
-      
+
+
+    torch.save(model, "/content/drive/MyDrive/Università/Progetto Lab IAGI/Training Model Checkpoint/Fold {}/checkpoint_model_fold_{}.pt".format(fold+1, fold+1))
+
+    total_train_loss_file_fold = open('/content/drive/MyDrive/Università/Progetto Lab IAGI/Training Model Checkpoint/Fold {}/total_train_loss_fold_{}.txt'.format(fold+1, fold+1), 'wb')
+    pickle.dump(total_train_loss, total_train_loss_file_fold)
+
+    total_val_loss_file_fold = open('/content/drive/MyDrive/Università/Progetto Lab IAGI/Training Model Checkpoint/Fold {}/total_val_loss_fold_{}.txt'.format(fold+1, fold+1), 'wb')
+    pickle.dump(total_val_loss, total_val_loss_file_fold)
+
+    total_train_acc_file_fold = open('/content/drive/MyDrive/Università/Progetto Lab IAGI/Training Model Checkpoint/Fold {}/total_train_acc_fold_{}.txt'.format(fold+1, fold+1), 'wb')
+    pickle.dump(total_train_acc, total_train_acc_file_fold)
+
+    total_val_acc_file_fold = open('/content/drive/MyDrive/Università/Progetto Lab IAGI/Training Model Checkpoint/Fold {}/total_val_acc_fold_{}.txt'.format(fold+1, fold+1), 'wb')
+    pickle.dump(total_val_acc, total_val_acc_file_fold)
+  
+
     fold_performance['fold{}'.format(fold+1)] = history  
 
     print("\n\n")
@@ -490,6 +525,8 @@ def training(dataset = None, model = None, device = None, optimizer = None, crit
 
 def test_on_1batch(dataset = None, model = None):
 
+  model.eval()
+
   test_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
   dataiter = iter(test_loader)
@@ -505,9 +542,9 @@ def test_on_1batch(dataset = None, model = None):
   out = []
 
   for elem in outputs:
-    if elem.item() >= 0.5:
+    if elem.item() > 0.5:
       out.append(1)
-    elif elem.item() < 0.5:
+    elif elem.item() <= 0.5:
       out.append(0)
 
   print("+------------------------------------+")
@@ -518,6 +555,8 @@ def test_on_1batch(dataset = None, model = None):
   print("+------------------------------------+")
 
 def test_and_metrics(dataset = None, model = None, total_train_loss = None, total_train_acc = None, total_val_loss = None, total_val_acc = None):
+  
+  model.eval()
   
   test_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
   
@@ -535,7 +574,6 @@ def test_and_metrics(dataset = None, model = None, total_train_loss = None, tota
   true_malignant = 0  # GT = malignant and Pred = malignant
   false_malignant = 0 # GT = benign and Pred = malignant
 
-  sample_weights = []
 
   with torch.no_grad():
     for data in test_loader:
@@ -548,7 +586,7 @@ def test_and_metrics(dataset = None, model = None, total_train_loss = None, tota
 
           lab = labels[i].item()
           out = 0
-          if outputs[i][0].item()>=0.5:
+          if outputs[i][0].item()>0.5:
             out = 1
 
           Y.append(lab)
@@ -564,10 +602,6 @@ def test_and_metrics(dataset = None, model = None, total_train_loss = None, tota
           elif(lab == 0 and out == 1):
             false_malignant += 1
 
-          if(lab == 0):
-            sample_weights.append(1)
-          else:
-            sample_weights.append(4)
 
 
   # Learning Curve of Loss and Accuracy
@@ -582,7 +616,7 @@ def test_and_metrics(dataset = None, model = None, total_train_loss = None, tota
     plt.rc('ytick', labelsize=12)
     plt.show()
 
-  print("\n")
+    print("\n")
 
   if total_train_acc != None and total_val_acc != None:
     plt.plot(total_train_acc, label = 'training accuracy')
@@ -595,26 +629,15 @@ def test_and_metrics(dataset = None, model = None, total_train_loss = None, tota
     plt.rc('ytick', labelsize=12)
     plt.show()
 
-  print("\n\n")
+    print("\n\n")
 
 
   # Confusion Matrix
-  cm = confusion_matrix(Y, Y_hat)
+  cm = confusion_matrix(Y, Y_hat, normalize='true')
   plt.figure()
   sns.set(font_scale=1)
   hm = sns.heatmap(cm, cbar=True, annot=True, square=True, fmt='.2f', annot_kws={'size': 12}, yticklabels=['0', '1'], xticklabels=['0', '1'])
   plt.title('Confusion Matrix', fontdict={'fontsize':16})
-  plt.ylabel('Ground Truth', fontdict={'fontsize':13})
-  plt.xlabel('Prediction', fontdict={'fontsize':13})
-  plt.show()
-
-  print('\n')
-
-  cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
-  plt.figure()
-  sns.set(font_scale=1)
-  hm = sns.heatmap(cm, cbar=True, annot=True, square=True, fmt='.2f', annot_kws={'size': 12}, yticklabels=['0', '1'], xticklabels=['0', '1'])
-  plt.title('Normalized Confusion Matrix', fontdict={'fontsize':16})
   plt.ylabel('Ground Truth', fontdict={'fontsize':13})
   plt.xlabel('Prediction', fontdict={'fontsize':13})
   plt.show()
@@ -659,7 +682,7 @@ def test_and_metrics(dataset = None, model = None, total_train_loss = None, tota
 
   # ALL METRICS
 
-  Balanced_Multiclass_Accuracy = balanced_accuracy_score(Y, Y_hat, sample_weight = sample_weights)
+  Balanced_Multiclass_Accuracy = balanced_accuracy_score(Y, Y_hat)
 
   AUC = roc_auc_score(Y, Y_hat_prob)
 
@@ -667,24 +690,17 @@ def test_and_metrics(dataset = None, model = None, total_train_loss = None, tota
 
   Average_Precision = average_precision_score(Y, Y_hat_prob)
 
-  accuracy = (true_benign+true_malignant)/(true_benign+true_malignant+false_benign+false_malignant)
+  accuracy = accuracy_score(Y, Y_hat, normalize=True)
 
-  accuracy_benign_class = true_benign/(true_benign+false_malignant)
+  sensitivity = true_malignant/(true_malignant+false_benign) #accuracy malignant class
+  
+  specificity = true_benign/(true_benign+false_malignant) #accuracy benign class
 
-  accuracy_malignant_class = true_malignant/(true_malignant+false_benign)
+  PPV = precision_score(Y, Y_hat, pos_label = 1) #true_pos/(true_pos+false_pos)
 
-  specificity = true_benign / (false_malignant + true_benign)
-
-  prevalence = (true_malignant + false_benign) / (true_benign+false_benign+true_malignant+false_malignant)
-
-  sensitivity = true_malignant/(true_malignant+false_benign)
-
-  PPV = (sensitivity * prevalence)/((sensitivity*prevalence)+((1-specificity)*(1-prevalence)))
-
-  NPV = (specificity*(1-prevalence))/(((1-sensitivity)*prevalence) + ((specificity)*1-prevalence))
+  NPV = precision_score(Y, Y_hat, pos_label = 0) #true_neg/(true_neg+false_neg)
 
   F1_score = f1_score(Y, Y_hat)
-
 
   print("+------------------------------------------+")
   print("|          ISIC Challenge Metrics          |")
@@ -701,15 +717,9 @@ def test_and_metrics(dataset = None, model = None, total_train_loss = None, tota
   print("|--------------------------------|---------|")
   print("|  Accuracy of model:            |  {:.3f}  |".format(accuracy))
   print("|--------------------------------|---------|")
-  print("|  Accuracy of benign class:     |  {:.3f}  |".format(accuracy_benign_class))
-  print("|--------------------------------|---------|")
-  print("|  Accuracy of malignant class:  |  {:.3f}  |".format(accuracy_malignant_class))
-  print("|--------------------------------|---------|")
   print("|  Sensitivity (recall):         |  {:.3f}  |".format(sensitivity))
   print("|--------------------------------|---------|")
   print("|  Specificity:                  |  {:.3f}  |".format(specificity))
-  print("|--------------------------------|---------|")
-  print("|  Prevalence:                   |  {:.3f}  |".format(prevalence))
   print("|--------------------------------|---------|")
   print("|  F1-Score (Dice Cofficient):   |  {:.3f}  |".format(F1_score))
   print("|--------------------------------|---------|")
@@ -739,9 +749,9 @@ stat_dataframe(data_type = 'Test', dataset_path = '/content/drive/MyDrive/Univer
 
 print_1batch(dataset = train_set)
 
-model, criterion, optimizer = get_model()
+model, optimizer = get_model()
 
-total_train_loss, total_train_acc, total_val_loss, total_val_acc = training(dataset = train_set, model = model, device = device, optimizer = optimizer, criterion = criterion)
+total_train_loss, total_train_acc, total_val_loss, total_val_acc = training(dataset = train_set, model = model, device = device, optimizer = optimizer)
 
 """###Testing and Evaluation
 -------------------------------------------------------------
@@ -778,17 +788,26 @@ Le metriche utilizzate sono:
 
 ## Load Model: execute ONLY if you want test model after runtime disconnecting ##
 
-#model = torch.load("/content/drive/MyDrive/Università/Progetto Lab IAGI/model.pt", map_location=torch.device('cuda'))
-#total_train_loss = None
-#total_train_acc = None
-#total_val_loss = None
-#total_val_acc = None
+#model = torch.load("/content/drive/MyDrive/Università/Progetto Lab IAGI/Training Model Checkpoint/checkpoint_model.pt", map_location=torch.device(device))
+
+#total_train_loss_file = open ('/content/drive/MyDrive/Università/Progetto Lab IAGI/Training Model Checkpoint/total_train_loss.txt', 'rb')
+#total_train_loss = pickle.load(total_train_loss_file)
+
+#total_val_loss_file = open ('/content/drive/MyDrive/Università/Progetto Lab IAGI/Training Model Checkpoint/total_val_loss.txt', 'rb')
+#total_val_loss = pickle.load(total_val_loss_file)
+
+#total_train_acc_file = open ('/content/drive/MyDrive/Università/Progetto Lab IAGI/Training Model Checkpoint/total_train_acc.txt', 'rb')
+#total_train_acc = pickle.load(total_train_acc_file)
+
+#total_val_acc_file = open ('/content/drive/MyDrive/Università/Progetto Lab IAGI/Training Model Checkpoint/total_val_acc.txt', 'rb')
+#total_val_acc = pickle.load(total_val_acc_file)
 
 test_on_1batch(dataset = test_set, model = model)
 
 test_and_metrics(dataset = test_set, model = model, total_train_loss = total_train_loss, total_train_acc = total_train_acc, total_val_loss = total_val_loss, total_val_acc = total_val_acc)
 
-"""Per questa Task (ISIC Challenge 2016, Task 3, Lesion Classification) il primo classificato nella leaderbords ufficale ha riportato i seguenti valori: 
+"""-------------------------------------------------------------
+Per questa Task (ISIC Challenge 2016, Task 3, Lesion Classification) il primo classificato nella leaderbords ufficale ha riportato i seguenti valori: 
 
 | Metric                      | Value |
 |-----------------------------|-------|
