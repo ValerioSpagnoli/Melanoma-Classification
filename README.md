@@ -11,3 +11,5 @@ Progetto di Spagnoli Valerio: *spagnoli.1887715@studenti.uniroma1.it*.
   
 [![View filled on Github](https://img.shields.io/static/v1.svg?logo=github&label=Repo&message=View%20On%20Github&color=purple)](https://github.com/ValerioSpagnoli/Nevi-Classification/blob/main/Nevi_Classification.ipynb)
 [![Open filled In Collab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1e4YtGOXGq-ZCI5Iun__t99Y4HTTMuQXa?authuser=1#scrollTo=uQbBFaezBVRa)  
+
+Link alla cartella Google Drive: [![View filled on Drive](https://drive.google.com/drive/folders/1bImBBxri-gkreh2NBbZlQjz7ValCqieA?usp=sharing)]
