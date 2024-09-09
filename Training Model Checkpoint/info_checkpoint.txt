@@ -1,2 +1,0 @@
-Fold: 8
-Epoch: 10

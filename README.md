@@ -8,3 +8,4 @@ Bachelor thesis project of Engineering in Computer Science at "La Sapienza" Univ
 The project consist in a binary classification for melanoma detection. 
 Reference was made to the Challenge proposed the [International Skin Imaging Collaboration](https://challenge.isic-archive.com) in 2016, and in particular Task 3 ([Lesion Classification](https://challenge.isic-archive.com/landing/2016/39/*)), using its datasets and testing the model through the same metrics.
 
+For a detailed explanation of the project and results, please refer to the [thesis](thesis.pdf).
